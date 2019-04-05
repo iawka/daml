@@ -12,6 +12,7 @@ import com.digitalasset.ledger.api.testing.utils.Resource
 import com.digitalasset.platform.PlatformApplications
 import com.digitalasset.platform.apitesting.LedgerFactories.SandboxStore.InMemory
 import com.digitalasset.platform.damllf.PackageParser
+import com.digitalasset.platform.sandbox.SandboxApplication.SandboxServer
 import com.digitalasset.platform.sandbox.persistence.{PostgresFixture, PostgresResource}
 
 import scala.util.control.NonFatal
@@ -54,14 +55,15 @@ object LedgerFactories {
     implicit esf: ExecutionSequencerFactory): Resource[LedgerContext.SingleChannelContext] = {
     val packageIds = config.darFiles.map(getPackageIdOrThrow)
 
+    def createResource(server: SandboxServer) =
+      SandboxServerResource(server).map {
+        case PlatformChannels(channel) =>
+          LedgerContext.SingleChannelContext(channel, config.ledgerId, packageIds)
+      }
+
     store match {
       case SandboxStore.InMemory =>
-        SandboxServerResource(PlatformApplications.sandboxApplication(config, None)).map {
-          case PlatformChannels(channel) =>
-            //TODO share code with below!
-            LedgerContext.SingleChannelContext(channel, config.ledgerId, packageIds)
-        }
-
+        createResource(PlatformApplications.sandboxApplication(config, None))
       case SandboxStore.Postgres =>
         new Resource[LedgerContext.SingleChannelContext] {
           @volatile
@@ -75,14 +77,9 @@ object LedgerFactories {
           override def setup(): Unit = {
             postgres = PostgresResource()
             postgres.setup()
-
-            sandbox = SandboxServerResource(PlatformApplications.sandboxApplication(config, Some(postgres.value.jdbcUrl))).map {
-              case PlatformChannels(channel) =>
-                LedgerContext.SingleChannelContext(channel, config.ledgerId, packageIds)
-            }
+            sandbox = createResource(PlatformApplications.sandboxApplication(config, Some(postgres.value.jdbcUrl)))
             sandbox.setup()
           }
-
 
           override def close(): Unit = {
             sandbox.close()
