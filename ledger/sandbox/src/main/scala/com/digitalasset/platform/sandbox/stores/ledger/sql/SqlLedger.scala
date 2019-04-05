@@ -159,9 +159,10 @@ private class SqlLedger(
         val transactionId = offset.toString
         val toAbsCoid: ContractId => AbsoluteContractId =
           SandboxEventIdFormatter.makeAbsCoid(transactionId)
+
         val mappedTx = tx.transaction
           .mapContractIdAndValue(toAbsCoid, _.mapContractId(toAbsCoid))
-          .mapNodeId(_.index.toString)
+          .mapNodeId(SandboxEventIdFormatter.fromTransactionId(transactionId, _))
 
         val mappedDisclosure = tx.blindingInfo.explicitDisclosure
           .map {

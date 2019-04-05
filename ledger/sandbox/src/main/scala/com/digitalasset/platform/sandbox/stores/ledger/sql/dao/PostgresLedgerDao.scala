@@ -270,6 +270,22 @@ private class PostgresLedgerDao(
           )
         }
 
+        SQL_INSERT_TRANSACTION
+          .on(
+            "ledger_offset" -> offset,
+            "transaction_id" -> transactionId,
+            "command_id" -> commandId,
+            "application_id" -> applicationId,
+            "submitter" -> submitter,
+            "workflow_id" -> workflowId,
+            "effective_at" -> ledgerEffectiveTime,
+            "recorded_at" -> recordedAt,
+            "transaction" -> transactionSerializer
+              .serialiseTransaction(transaction)
+              .getOrElse(sys.error(s"failed to serialise transaction! trId: ${transactionId}"))
+          )
+          .execute()
+
         val disclosureParams = explicitDisclosure.flatMap {
           case (eventId, parties) =>
             parties.map(
@@ -288,22 +304,6 @@ private class PostgresLedgerDao(
               disclosureParams.drop(1).toArray: _*)
           batchInsertDisclosures.execute()
         }
-
-        SQL_INSERT_TRANSACTION
-          .on(
-            "ledger_offset" -> offset,
-            "transaction_id" -> transactionId,
-            "command_id" -> commandId,
-            "application_id" -> applicationId,
-            "submitter" -> submitter,
-            "workflow_id" -> workflowId,
-            "effective_at" -> ledgerEffectiveTime,
-            "recorded_at" -> recordedAt,
-            "transaction" -> transactionSerializer
-              .serialiseTransaction(transaction)
-              .getOrElse(sys.error(s"failed to serialise transaction! trId: ${transactionId}"))
-          )
-          .execute()
 
         updateActiveContractSet(offset, tx).flatMap { rejectionReason =>
           // we need to rollback the existing sql transaction
