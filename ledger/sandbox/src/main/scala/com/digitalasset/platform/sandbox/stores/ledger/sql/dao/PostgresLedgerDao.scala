@@ -224,8 +224,7 @@ private class PostgresLedgerDao(
               contractO match {
                 case Some(c) =>
                   if (c.let.isAfter(let)) {
-                    Some(RejectionReason.TimedOut(
-                      s"Dependency contract ${c.contractId.coid} has higher time (${c.let}) than current let ($let)"))
+                    Some(RejectionReason.Inconsistent(s"Dependency contract ${c.contractId.coid} has higher time (${c.let}) than current let ($let)"))
                   } else go(tail)
                 case None =>
                   Some(RejectionReason.Inconsistent(s"Contract ${cid.coid} was not found in ACS"))
