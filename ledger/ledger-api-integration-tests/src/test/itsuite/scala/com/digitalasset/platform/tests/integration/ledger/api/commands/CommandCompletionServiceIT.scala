@@ -5,14 +5,18 @@ package com.digitalasset.platform.tests.integration.ledger.api.commands
 
 import akka.NotUsed
 import akka.stream.scaladsl.{Sink, Source}
+import com.digitalasset.ledger.api.testing.utils.MockMessages.{applicationId, party}
 import com.digitalasset.ledger.api.testing.utils.{AkkaBeforeAndAfterAll, SuiteResourceManagementAroundAll}
 import com.digitalasset.ledger.api.v1.command_completion_service.CommandCompletionServiceGrpc.CommandCompletionService
-import com.digitalasset.ledger.api.v1.command_completion_service.CompletionStreamRequest
+import com.digitalasset.ledger.api.v1.command_completion_service.{Checkpoint, CompletionStreamRequest}
 import com.digitalasset.ledger.api.v1.completion.Completion
 import com.digitalasset.ledger.api.v1.ledger_offset.LedgerOffset
+import com.digitalasset.ledger.api.v1.ledger_offset.LedgerOffset.LedgerBoundary.LEDGER_BEGIN
+import com.digitalasset.ledger.api.v1.ledger_offset.LedgerOffset.Value.Boundary
+import com.digitalasset.ledger.client.services.commands.CompletionStreamElement.CheckpointElement
 import com.digitalasset.ledger.client.services.commands.{CommandCompletionSource, CompletionStreamElement}
 import com.digitalasset.platform.apitesting.LedgerContextExtensions._
-import com.digitalasset.platform.apitesting.{LedgerBackend, MultiLedgerFixture}
+import com.digitalasset.platform.apitesting.MultiLedgerFixture
 import com.digitalasset.platform.services.time.TimeProviderType.WallClock
 import com.digitalasset.util.Ctx
 import com.google.rpc.status.Status
@@ -27,9 +31,6 @@ class CommandCompletionServiceIT
     with Matchers
     with MultiLedgerFixture
     with SuiteResourceManagementAroundAll {
-
-  //TODO revert
-  override protected def fixtureIdsEnabled: Set[LedgerBackend] = Set(LedgerBackend.SandboxSql)
 
   private def completionSource(
                                 completionService: CommandCompletionService,
@@ -57,31 +58,31 @@ class CommandCompletionServiceIT
         }
       }
 
-      //      "emit periodic Checkpoints with RecordTimes" in allFixtures { ctx =>
-      //        val completionService =
-      //          completionSource(
-      //            ctx.commandCompletionService,
-      //            ctx.ledgerId,
-      //            applicationId,
-      //            Seq(party),
-      //            LedgerOffset(Boundary(LEDGER_BEGIN)))
-      //
-      //        val recordTimes = completionService.collect {
-      //          case CheckpointElement(Checkpoint(Some(recordTime), _)) => recordTime
-      //        }
-      //
-      //        recordTimes
-      //          .batch(Long.MaxValue, ts => List(ts))((list, ts) => ts :: list)
-      //          .throttle(1, 5.seconds)
-      //          .drop(2) // initially we might miss a few for some reason
-      //          .map(_.size)
-      //          .take(2)
-      //          .runWith(Sink.seq)
-      //          .map { noOfHeartBeats =>
-      //            noOfHeartBeats.foreach(_ should be >= 2) // should be fine for 1Hz
-      //            succeed
-      //          }
-      //      }
+      "emit periodic Checkpoints with RecordTimes" in allFixtures { ctx =>
+        val completionService =
+          completionSource(
+            ctx.commandCompletionService,
+            ctx.ledgerId,
+            applicationId,
+            Seq(party),
+            LedgerOffset(Boundary(LEDGER_BEGIN)))
+
+        val recordTimes = completionService.collect {
+          case CheckpointElement(Checkpoint(Some(recordTime), _)) => recordTime
+        }
+
+        recordTimes
+          .batch(Long.MaxValue, ts => List(ts))((list, ts) => ts :: list)
+          .throttle(1, 5.seconds)
+          .drop(2) // initially we might miss a few for some reason
+          .map(_.size)
+          .take(2)
+          .runWith(Sink.seq)
+          .map { noOfHeartBeats =>
+            noOfHeartBeats.foreach(_ should be >= 2) // should be fine for 1Hz
+            succeed
+          }
+      }
     }
   }
 
